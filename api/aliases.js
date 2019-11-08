@@ -1,0 +1,13 @@
+var ALIASES = {};
+ALIASES["wasm2obj"] = {};
+ALIASES["wasmtime"] = {};
+ALIASES["wasmtime_api"] = {};
+ALIASES["wasmtime_debug"] = {};
+ALIASES["wasmtime_environ"] = {};
+ALIASES["wasmtime_interface_types"] = {};
+ALIASES["wasmtime_jit"] = {};
+ALIASES["wasmtime_obj"] = {};
+ALIASES["wasmtime_runtime"] = {};
+ALIASES["wasmtime_wasi"] = {};
+ALIASES["wasmtime_wast"] = {};
+ALIASES["wast"] = {};

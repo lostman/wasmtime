@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["instantiate_wasi","Return an instance implementing the \"wasi\" interface."]]});
