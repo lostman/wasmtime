@@ -86,11 +86,13 @@ impl WrappedCallable for WasmtimeFn {
 
         // Call the trampoline.
         if let Err(message) = unsafe {
-            wasmtime_runtime::wasmtime_call_trampoline(
-                vmctx,
-                exec_code_buf,
-                values_vec.as_mut_ptr() as *mut u8,
-            )
+            self.instance.with_signals_on(|| {
+                wasmtime_runtime::wasmtime_call_trampoline(
+                    vmctx,
+                    exec_code_buf,
+                    values_vec.as_mut_ptr() as *mut u8,
+                )
+            })
         } {
             return Err(HostRef::new(Trap::new(message)));
         }
