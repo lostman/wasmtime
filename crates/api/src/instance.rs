@@ -9,8 +9,9 @@ use anyhow::Result;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
-use wasmtime_jit::{instantiate, Resolver};
-use wasmtime_runtime::{Export, InstanceHandle};
+use wasmtime_environ::{entity::BoxedSlice, wasm::DefinedMemoryIndex};
+use wasmtime_jit::{instantiate, instantiate_with_external_memory, Resolver};
+use wasmtime_runtime::{Export, InstanceHandle, LinearMemory};
 
 struct SimpleResolver {
     imports: Vec<(String, String, Extern)>,
@@ -51,6 +52,28 @@ pub fn instantiate_in_context(
     Ok((instance, contexts))
 }
 
+pub fn instantiate_in_context_with_external_memory(
+    data: &[u8],
+    imports: Vec<(String, String, Extern)>,
+    mut context: Context,
+    exports: Rc<RefCell<HashMap<String, Option<wasmtime_runtime::Export>>>>,
+    memories: BoxedSlice<DefinedMemoryIndex, LinearMemory>,
+) -> Result<(InstanceHandle, HashSet<Context>)> {
+    let mut contexts = HashSet::new();
+    let debug_info = context.debug_info();
+    let mut resolver = SimpleResolver { imports };
+    let instance = instantiate_with_external_memory(
+        &mut context.compiler(),
+        data,
+        &mut resolver,
+        exports,
+        debug_info,
+        memories,
+    )?;
+    contexts.insert(context);
+    Ok((instance, contexts))
+}
+
 #[derive(Clone)]
 pub struct Instance {
     instance_handle: InstanceHandle,
@@ -64,6 +87,51 @@ pub struct Instance {
 }
 
 impl Instance {
+    pub fn new_with_external_memory(
+        store: &HostRef<Store>,
+        module: &HostRef<Module>,
+        externs: &[Extern],
+        memories: BoxedSlice<DefinedMemoryIndex, LinearMemory>,
+    ) -> Result<Instance> {
+        let context = store.borrow_mut().context().clone();
+        let exports = store.borrow_mut().global_exports().clone();
+        let imports = module
+            .borrow()
+            .imports()
+            .iter()
+            .zip(externs.iter())
+            .map(|(i, e)| (i.module().to_string(), i.name().to_string(), e.clone()))
+            .collect::<Vec<_>>();
+        let (mut instance_handle, contexts) = instantiate_in_context_with_external_memory(
+            module.borrow().binary().expect("binary"),
+            imports,
+            context,
+            exports,
+            memories,
+        )?;
+
+        let exports = {
+            let module = module.borrow();
+            let mut exports = Vec::with_capacity(module.exports().len());
+            for export in module.exports() {
+                let name = export.name().to_string();
+                let export = instance_handle.lookup(&name).expect("export");
+                exports.push(Extern::from_wasmtime_export(
+                    store,
+                    instance_handle.clone(),
+                    export,
+                ));
+            }
+            exports.into_boxed_slice()
+        };
+        Ok(Instance {
+            instance_handle,
+            module: module.clone(),
+            contexts,
+            exports,
+        })
+    }
+
     pub fn new(
         store: &HostRef<Store>,
         module: &HostRef<Module>,

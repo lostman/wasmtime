@@ -759,7 +759,7 @@ impl InstanceHandle {
     }
 
     /// Create a new `InstanceHandle` pointing at a new `Instance`.
-    pub fn new(
+    pub fn new_with_external_memory(
         module: Rc<Module>,
         global_exports: Rc<RefCell<HashMap<String, Option<Export>>>>,
         finished_functions: BoxedSlice<DefinedFuncIndex, *const VMFunctionBody>,
@@ -768,9 +768,9 @@ impl InstanceHandle {
         vmshared_signatures: BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
         dbg_jit_registration: Option<Rc<GdbJitImageRegistration>>,
         host_state: Box<dyn Any>,
+        mut memories: BoxedSlice<DefinedMemoryIndex, LinearMemory>,
     ) -> Result<Self, InstantiationError> {
         let mut tables = create_tables(&module);
-        let mut memories = create_memories(&module)?;
 
         let vmctx_tables = tables
             .values_mut()
@@ -778,7 +778,7 @@ impl InstanceHandle {
             .collect::<PrimaryMap<DefinedTableIndex, _>>()
             .into_boxed_slice();
 
-        let vmctx_memories = memories
+        let vmctx_memories: BoxedSlice<DefinedMemoryIndex, VMMemoryDefinition> = memories
             .values_mut()
             .map(LinearMemory::vmmemory)
             .collect::<PrimaryMap<DefinedMemoryIndex, _>>()
@@ -850,6 +850,7 @@ impl InstanceHandle {
                 instance.tables_ptr() as *mut VMTableDefinition,
                 vmctx_tables.len(),
             );
+            // copy memory definitions (start address + size in bytes) into instance object
             ptr::copy(
                 vmctx_memories.values().as_slice().as_ptr(),
                 instance.memories_ptr() as *mut VMMemoryDefinition,
@@ -904,6 +905,31 @@ impl InstanceHandle {
         instance.invoke_start_function()?;
 
         Ok(Self { instance })
+    }
+
+    /// Create a new `InstanceHandle` pointing at a new `Instance`.
+    pub fn new(
+        module: Rc<Module>,
+        global_exports: Rc<RefCell<HashMap<String, Option<Export>>>>,
+        finished_functions: BoxedSlice<DefinedFuncIndex, *const VMFunctionBody>,
+        imports: Imports,
+        data_initializers: &[DataInitializer<'_>],
+        vmshared_signatures: BoxedSlice<SignatureIndex, VMSharedSignatureIndex>,
+        dbg_jit_registration: Option<Rc<GdbJitImageRegistration>>,
+        host_state: Box<dyn Any>,
+    ) -> Result<Self, InstantiationError> {
+        let memories = create_memories(&module)?;
+        Self::new_with_external_memory(
+            module,
+            global_exports,
+            finished_functions,
+            imports,
+            data_initializers,
+            vmshared_signatures,
+            dbg_jit_registration,
+            host_state,
+            memories,
+        )
     }
 
     /// Create a new `InstanceHandle` pointing at the instance

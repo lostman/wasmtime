@@ -11,27 +11,30 @@ use wasmtime_environ::{MemoryPlan, MemoryStyle, WASM_MAX_PAGES, WASM_PAGE_SIZE};
 /// A linear memory instance.
 #[derive(Debug)]
 pub struct LinearMemory {
-    // The underlying allocation.
-    mmap: Mmap,
+    /// The underlying allocation.
+    pub mmap: Mmap,
 
-    // The current logical size in wasm pages of this linear memory.
-    current: u32,
+    /// The current logical size in wasm pages of this linear memory.
+    pub current: u32,
 
-    // The optional maximum size in wasm pages of this linear memory.
-    maximum: Option<u32>,
+    /// The optional maximum size in wasm pages of this linear memory.
+    pub maximum: Option<u32>,
 
-    // Size in bytes of extra guard pages after the end to optimize loads and stores with
-    // constant offsets.
-    offset_guard_size: usize,
+    /// Size in bytes of extra guard pages after the end to optimize loads and stores with
+    /// constant offsets.
+    pub offset_guard_size: usize,
 
-    // Records whether we're using a bounds-checking strategy which requires
-    // handlers to catch trapping accesses.
-    pub(crate) needs_signal_handlers: bool,
+    /// Records whether we're using a bounds-checking strategy which requires
+    /// handlers to catch trapping accesses.
+    pub needs_signal_handlers: bool,
 }
 
 impl LinearMemory {
-    /// Create a new linear memory instance with specified minimum and maximum number of wasm pages.
-    pub fn new(plan: &MemoryPlan) -> Result<Self, String> {
+    /// TODO
+    pub fn new_with_external_memory(
+        plan: &MemoryPlan,
+        make_memory: &mut dyn FnMut(usize, usize) -> Result<Mmap, String>,
+    ) -> Result<Self, String> {
         // `maximum` cannot be set to more than `65536` pages.
         assert_le!(plan.memory.minimum, WASM_MAX_PAGES);
         assert!(plan.memory.maximum.is_none() || plan.memory.maximum.unwrap() <= WASM_MAX_PAGES);
@@ -59,7 +62,7 @@ impl LinearMemory {
         let mapped_pages = plan.memory.minimum as usize;
         let mapped_bytes = mapped_pages * WASM_PAGE_SIZE as usize;
 
-        let mmap = Mmap::accessible_reserved(mapped_bytes, request_bytes)?;
+        let mmap = make_memory(mapped_bytes, request_bytes)?;
 
         Ok(Self {
             mmap,
@@ -68,6 +71,11 @@ impl LinearMemory {
             offset_guard_size: offset_guard_bytes,
             needs_signal_handlers,
         })
+    }
+
+    /// Create a new linear memory instance with specified minimum and maximum number of wasm pages.
+    pub fn new(plan: &MemoryPlan) -> Result<Self, String> {
+        Self::new_with_external_memory(plan, &mut Mmap::accessible_reserved)
     }
 
     /// Returns the number of allocated wasm pages.

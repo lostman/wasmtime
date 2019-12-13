@@ -13,13 +13,13 @@ use std::rc::Rc;
 use thiserror::Error;
 use wasmtime_debug::read_debuginfo;
 use wasmtime_environ::entity::{BoxedSlice, PrimaryMap};
-use wasmtime_environ::wasm::{DefinedFuncIndex, SignatureIndex};
+use wasmtime_environ::wasm::{DefinedFuncIndex, DefinedMemoryIndex, SignatureIndex};
 use wasmtime_environ::{
     CompileError, DataInitializer, DataInitializerLocation, Module, ModuleEnvironment,
 };
 use wasmtime_runtime::{
-    Export, GdbJitImageRegistration, Imports, InstanceHandle, InstantiationError, VMFunctionBody,
-    VMSharedSignatureIndex,
+    Export, GdbJitImageRegistration, Imports, InstanceHandle, InstantiationError, LinearMemory,
+    VMFunctionBody, VMSharedSignatureIndex,
 };
 
 /// An error condition while setting up a wasm instance, be it validation,
@@ -220,6 +220,32 @@ impl CompiledModule {
         )
     }
 
+    /// Crate an `Instance` from this `CompiledModule`.
+    pub fn instantiate_with_external_memory(
+        &mut self,
+        memories: BoxedSlice<DefinedMemoryIndex, LinearMemory>,
+    ) -> Result<InstanceHandle, InstantiationError> {
+        let data_initializers = self
+            .data_initializers
+            .iter()
+            .map(|init| DataInitializer {
+                location: init.location.clone(),
+                data: &*init.data,
+            })
+            .collect::<Vec<_>>();
+        InstanceHandle::new_with_external_memory(
+            Rc::clone(&self.module),
+            Rc::clone(&self.global_exports),
+            self.finished_functions.clone(),
+            self.imports.clone(),
+            &data_initializers,
+            self.signatures.clone(),
+            self.dbg_jit_registration.as_ref().map(|r| Rc::clone(&r)),
+            Box::new(()),
+            memories,
+        )
+    }
+
     /// Return a reference-counting pointer to a module.
     pub fn module(&self) -> Rc<Module> {
         self.module.clone()
@@ -272,6 +298,31 @@ pub fn instantiate(
         raw.signatures,
         raw.dbg_jit_registration.map(|r| Rc::new(r)),
         Box::new(()),
+    )
+    .map_err(SetupError::Instantiate)
+}
+
+/// Create a new wasm instance by compiling the wasm module in `data` and instatiating it.
+pub fn instantiate_with_external_memory(
+    compiler: &mut Compiler,
+    data: &[u8],
+    resolver: &mut dyn Resolver,
+    global_exports: Rc<RefCell<HashMap<String, Option<Export>>>>,
+    debug_info: bool,
+    memories: BoxedSlice<DefinedMemoryIndex, LinearMemory>,
+) -> Result<InstanceHandle, SetupError> {
+    let raw = RawCompiledModule::new(compiler, data, resolver, debug_info)?;
+
+    InstanceHandle::new_with_external_memory(
+        Rc::new(raw.module),
+        global_exports,
+        raw.finished_functions,
+        raw.imports,
+        &*raw.data_initializers,
+        raw.signatures,
+        raw.dbg_jit_registration.map(|r| Rc::new(r)),
+        Box::new(()),
+        memories,
     )
     .map_err(SetupError::Instantiate)
 }

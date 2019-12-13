@@ -41,6 +41,7 @@ pub use crate::export::Export;
 pub use crate::imports::Imports;
 pub use crate::instance::{InstanceHandle, InstantiationError, LinkError};
 pub use crate::jit_int::GdbJitImageRegistration;
+pub use crate::memory::LinearMemory;
 pub use crate::mmap::Mmap;
 pub use crate::sig_registry::SignatureRegistry;
 pub use crate::signalhandlers::{wasmtime_init_eager, wasmtime_init_finish};
