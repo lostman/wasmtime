@@ -154,7 +154,7 @@ impl Store {
         index
     }
 
-    pub(crate) fn lookup_wasmtime_signature(
+    pub fn lookup_wasmtime_signature(
         &self,
         type_index: wasmtime_runtime::VMSharedSignatureIndex,
     ) -> Option<&ir::Signature> {
