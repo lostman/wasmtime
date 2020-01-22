@@ -224,7 +224,7 @@ pub(crate) fn into_checked_anyfunc(
     }
 }
 
-pub(crate) fn from_checked_anyfunc(
+pub fn from_checked_anyfunc(
     item: &wasmtime_runtime::VMCallerCheckedAnyfunc,
     store: &HostRef<Store>,
 ) -> Val {
